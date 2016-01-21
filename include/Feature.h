@@ -54,6 +54,16 @@ public:
 		return mu;
 	}
 
+	bool operator == (Feature& f)
+	{
+		if (f.vals.size() != vals.size()) return false;
+		for (int k = 0; k < vals.size(); ++k)
+		{
+			if (vals[k] != f.vals[k]) return false;
+		}
+		return true;
+	}
+
 	static techsoft::matrix<float> toColumnVector(const Feature& f)
 	{
 		techsoft::matrix<float> v(f.length(), 1);

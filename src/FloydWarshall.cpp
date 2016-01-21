@@ -19,7 +19,7 @@ AdjustWeights(AdjacencyMatrix& A)
 			}
 			else if(A.Get(i, j) == 0)
 			{
-				A.Set(i, j, numeric_limits<float>::infinity());
+				A.Set(i, j, std::numeric_limits<float>::infinity());
 			}
 		}
 	}
@@ -37,7 +37,7 @@ AdjustPredecessor(AdjacencyPredecessorMatrix& A)
 			{
 				A.SetPi(i, j, -1);
 			}
-			else if(A.Get(i, j) < numeric_limits<float>::infinity())
+			else if(A.Get(i, j) < std::numeric_limits<float>::infinity())
 			{
 				A.SetPi(i, j, i);
 			}

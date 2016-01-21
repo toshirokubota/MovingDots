@@ -3,7 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PointGroup", "PointGroup\PointGroup.vcxproj", "{06F42A95-16DF-4798-833C-1AA0CE445382}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PointGroupTest", "GroupPointsTest\GroupPointsTest.vcxproj", "{06F42A95-16DF-4798-833C-1AA0CE445382}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MovingSkeletonGrouping", "MovingSkeletonGrouping\MovingSkeletonGrouping.vcxproj", "{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Skeletonization", "Skeletonization\Skeletonization.vcxproj", "{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PointLightGrouping", "PointLightGrouping\PointLightGrouping.vcxproj", "{149697EC-C784-4FA1-B9D3-CECC6C263C90}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -19,6 +25,26 @@ Global
 		{06F42A95-16DF-4798-833C-1AA0CE445382}.Release|Win32.ActiveCfg = Release|Win32
 		{06F42A95-16DF-4798-833C-1AA0CE445382}.Release|Win32.Build.0 = Release|Win32
 		{06F42A95-16DF-4798-833C-1AA0CE445382}.Release|x64.ActiveCfg = Release|Win32
+		{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}.Debug|Win32.ActiveCfg = Debug|Win32
+		{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}.Debug|Win32.Build.0 = Debug|Win32
+		{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}.Debug|x64.ActiveCfg = Debug|Win32
+		{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}.Release|Win32.ActiveCfg = Release|Win32
+		{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}.Release|Win32.Build.0 = Release|Win32
+		{62A5ACB4-052D-48F4-AFB2-611DF36F23A5}.Release|x64.ActiveCfg = Release|Win32
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Debug|Win32.Build.0 = Debug|Win32
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Debug|x64.ActiveCfg = Debug|x64
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Debug|x64.Build.0 = Debug|x64
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Release|Win32.ActiveCfg = Release|Win32
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Release|Win32.Build.0 = Release|Win32
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Release|x64.ActiveCfg = Release|x64
+		{3B5A8D60-69BC-4EA4-9E30-2C326E294E4F}.Release|x64.Build.0 = Release|x64
+		{149697EC-C784-4FA1-B9D3-CECC6C263C90}.Debug|Win32.ActiveCfg = Debug|Win32
+		{149697EC-C784-4FA1-B9D3-CECC6C263C90}.Debug|Win32.Build.0 = Debug|Win32
+		{149697EC-C784-4FA1-B9D3-CECC6C263C90}.Debug|x64.ActiveCfg = Debug|Win32
+		{149697EC-C784-4FA1-B9D3-CECC6C263C90}.Release|Win32.ActiveCfg = Release|Win32
+		{149697EC-C784-4FA1-B9D3-CECC6C263C90}.Release|Win32.Build.0 = Release|Win32
+		{149697EC-C784-4FA1-B9D3-CECC6C263C90}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

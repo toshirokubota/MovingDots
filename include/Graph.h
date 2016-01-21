@@ -3,6 +3,7 @@
 #include <vector>
 #include <limits>
 #include <iostream>
+using namespace std;
 
 enum VertexColor {Black, White, Gray, Red, Green, Blue};
 enum EdgeType{Tr, Back, Forward, Cross};
