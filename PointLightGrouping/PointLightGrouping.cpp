@@ -19,38 +19,6 @@ using namespace std;
 
 int PointLight::_id = 0;
 
-PointLight*
-findWinnerNext(PointLight* p)
-{
-	PointLight* winner = NULL;
-	float maxp = 0.9; // p->nextP[p->nextC.size()];
-	for (int i = 0; i < p->nextC.size(); ++i)
-	{
-		if (p->nextP[i] > maxp)
-		{
-			winner = p->nextC[i];
-			maxp = p->nextP[i];
-		}
-	}
-	return winner;
-}
-
-PointLight*
-findWinnerPrev(PointLight* p)
-{
-	PointLight* winner = NULL;
-	float maxp = p->prevP[p->prevC.size()];
-	for (int i = 0; i < p->prevC.size(); ++i)
-	{
-		if (p->prevP[i] > maxp)
-		{
-			winner = p->prevC[i];
-			maxp = p->prevP[i];
-		}
-	}
-	return winner;
-}
-
 vector<int>
 clusterPoints(vector<PointLight*>& points)
 {
@@ -64,10 +32,10 @@ clusterPoints(vector<PointLight*>& points)
 	bool bError = false;
 	for (int i = 0; !bError && i < points.size(); ++i)
 	{
-		PointLight* w = findWinnerNext(points[i]);
+		PointLight* w = points[i]->nextWinner();
 		if (w != NULL)
 		{
-			if (points[i] == findWinnerPrev(w))
+			if (points[i] == w->prevWinner()) 
 			{
 				merge(nodes[i], nodes[pmap[w]]);
 			}
@@ -133,7 +101,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 			float x = GetData2(P0, i, 0, dimsP[0], dimsP[1], (float)0);
 			float y = GetData2(P0, i, 1, dimsP[0], dimsP[1], (float)0);
 			float fr = GetData2(P0, i, 2, dimsP[0], dimsP[1], (float)0);
-			P.push_back(new PointLight(x, y, fr));
+			float gid = GetData2(P0, i, 3, dimsP[0], dimsP[1], (float)0);
+			P.push_back(new PointLight(x, y, fr, gid));
 		}
 	}
 
@@ -143,7 +112,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		mxClassID classMode;
 		ReadScalar(numIter, prhs[1], classMode);
 	}
-	float sigma = 100.0;
+	float sigma = 10.0;
 	if (nrhs >= 3)
 	{
 		mxClassID classMode;

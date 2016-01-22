@@ -11,14 +11,15 @@ using namespace std;
 
 struct PointLight
 {
-	const float Threshold = 0.05;
-	const int NumCandidates = 3;
-	PointLight(float x0 = 0, float y0 = 0, float fr = 0)
+	const float Threshold = 0.01;
+	const int NumCandidates = 5;
+	PointLight(float x0 = 0, float y0 = 0, float fr = 0, int g = 0)
 	{
 		x = x0;
 		y = y0;
 		frame = fr;
 		id = _id++;
+		gid = g;
 	}
 
 	void initialize(vector<PointLight*>& points);
@@ -35,11 +36,14 @@ struct PointLight
 		}
 	}
 	void print(char* tab=NULL, char* newl=NULL);
+	PointLight* prevWinner();
+	PointLight* nextWinner();
 
 	float x;
 	float y;
 	float frame; 
 	int id;
+	int gid; //group id for debuggin.
 
 	vector<PointLight*> prevC; //possible correspondences from prev frame
 	vector<PointLight*> nextC; //possible correspondences from prev frame

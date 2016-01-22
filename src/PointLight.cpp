@@ -8,47 +8,82 @@ _Distance(PointLight* p, PointLight* q)
 }
 
 float
+_Continuity(PointLight* p, PointLight* q, int m, int n, float sgm)
+{
+	vector<float> pvals;
+	vector<PointLight*> cand;
+	if (p->frame < q->frame)
+	{
+		pvals = p->prevP;
+		cand = p->prevC;
+	}
+	else if(p->frame > q->frame)
+	{
+		pvals = p->nextP;
+		cand = p->nextC;
+	}
+	else {
+		return 0;
+	}
+
+	//find the average landing point given the candidates
+	float nx = 0, ny = 0, nf = q->frame - p->frame;
+	for (int i = 0; i < pvals.size(); ++i)
+	{
+		PointLight* r = i < cand.size() ? cand[i] : p;
+		float df = r->frame - p->frame;
+		if (Abs(df) > 0)
+		{
+			float vx = (r->x - p->x) / df;
+			float vy = (r->y - p->y) / df;
+			nx += pvals[i] * vx * nf;
+			ny += pvals[i] * vy * nf;
+		}
+	}
+	float px = p->x + nx;  //predicted x
+	float py = p->y + ny;  //predicted y
+	float ee = (q->x - px) * (q->x - px) + (q->y - py)*(q->y - py);
+	return exp(-ee / (2.*sgm*sgm));
+}
+
+float
 _Compatibility(PointLight* p, PointLight* q, int m, int n, float sgm)
 {
-	float ee = std::numeric_limits<float>::infinity();
-	float a = 1.0;
-	if (p->frame == q->frame - 1)
-	{
-		float dx = p->x - q->x;
-		float dy = p->y - q->y;
-		float dd = dx * dx + dy * dy;
-		ee = a * dd;
-		for (int i = 0; i<p->nextC.size(); ++i)
-		{
-			PointLight* r = p->nextC[i];
-			float dx2 = r->x - p->x;
-			float dy2 = r->y - p->y;
-			ee += p->nextP[i] * ((dx - dx2) * (dx - dx2) + (dy - dy2)*(dy - dy2));
-		}
-	}
-	else if (p->frame == q->frame + 1)
-	{
-		float dx = p->x - q->x;
-		float dy = p->y - q->y;
-		float dd = dx * dx + dy * dy;
-		ee = a *  dd;
-		for (int i = 0; i<p->prevC.size(); ++i)
-		{
-			PointLight* r = p->prevC[i];
-			float dx2 = r->x - p->x;
-			float dy2 = r->y - p->y;
-			ee += p->prevP[i] * ((dx - dx2) * (dx - dx2) + (dy - dy2)*(dy - dy2));
-		}
-	}
-	if (ee > 2.*sgm*sgm)
-	{
-		return .0;
-	}
-	else
-	{
-		return exp(-ee / (2.*sgm*sgm));
-	}
+	return (_Continuity(p, q, m, n, sgm) + _Continuity(q, p, n, m, sgm)) / 2.0f;
 }
+
+PointLight*
+PointLight::nextWinner()
+{
+	PointLight* winner = NULL;
+	float maxp = nextP[nextC.size()];
+	for (int i = 0; i < nextC.size(); ++i)
+	{
+		if (nextP[i] > maxp)
+		{
+			winner = nextC[i];
+			maxp = nextP[i];
+		}
+	}
+	return winner;
+}
+
+PointLight*
+PointLight::prevWinner()
+{
+	PointLight* winner = NULL;
+	float maxp = prevP[prevC.size()];
+	for (int i = 0; i < prevC.size(); ++i)
+	{
+		if (prevP[i] > maxp)
+		{
+			winner = prevC[i];
+			maxp = prevP[i];
+		}
+	}
+	return winner;
+}
+
 
 void
 PointLight::print(char* tab, char* newl)
@@ -73,16 +108,21 @@ PointLight::initialize(vector<PointLight*>& points)
 {
 	vector<pair<float, PointLight*>> prevPairs;
 	vector<pair<float, PointLight*>> nextPairs;
+	int  range = 10;
 	for (int i = 0; i < points.size(); ++i)
 	{
 		if (points[i] == this) continue;
-		if (points[i]->frame == frame - 1)
+		float df = this->frame - points[i]->frame;
+		if (Abs(df) <= range)
 		{
-			prevPairs.push_back(pair<float, PointLight*>(_Distance(this, points[i]), points[i]));
-		}
-		else if (points[i]->frame == frame + 1)
-		{
-			nextPairs.push_back(pair<float, PointLight*>(_Distance(this, points[i]), points[i]));
+			if (df > 0)
+			{
+				prevPairs.push_back(pair<float, PointLight*>(_Distance(this, points[i]), points[i]));
+			}
+			else if (df < 0)
+			{
+				nextPairs.push_back(pair<float, PointLight*>(_Distance(this, points[i]), points[i]));
+			}
 		}
 	}
 	sort(prevPairs.begin(), prevPairs.end());
@@ -97,6 +137,33 @@ PointLight::initialize(vector<PointLight*>& points)
 		PointLight* p = nextPairs[i].second;
 		nextC.push_back(p);
 	}
+
+	/*{
+		//for debuggin - check if candidates contain one from the same group.
+		bool bFoundP = false;
+		for (int i = 0; i < prevC.size(); ++i)
+		{
+			if (prevC[i]->gid == this->gid)
+			{
+				bFoundP = true;
+				break;
+			}
+		}
+		bool bFoundN = false;
+		for (int i = 0; i < nextC.size(); ++i)
+		{
+			if (nextC[i]->gid == this->gid)
+			{
+				bFoundN = true;
+				break;
+			}
+		}
+		if (bFoundP == false || bFoundN == false)
+		{
+			bFoundN = false;
+		}
+	}*/
+
 	prevP = vector<float>(prevC.size() + 1, 1.0 / (prevC.size() + 1));
 	nextP = vector<float>(nextC.size() + 1, 1.0 / (nextC.size() + 1));
 	prevP0 = prevP;
