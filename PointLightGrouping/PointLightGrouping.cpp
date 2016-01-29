@@ -78,7 +78,44 @@ clusterPoints(vector<PointLight*>& points)
 	return labels;
 }
 
+void
+setupInitialFrames(vector<PointLight*>& P, int numIter, float rate, float sigma)
+{
+	for (int i = 0; i < P.size(); ++i)
+	{
+		P[i]->velocityFreeInitialization(P);
+	}
 
+	for (int i = 0; i<numIter; ++i) {
+		for (int i = 0; i < P.size(); ++i)
+		{
+			P[i]->update0(sigma, P[i]->Threshold, rate);
+		}
+		for (int i = 0; i < P.size(); ++i)
+		{
+			P[i]->update();
+		}
+	}
+}
+
+void
+addFrame(vector<PointLight*>& P, vector<PointLight*>& frame, int numIter, float rate, float sigma)
+{
+	for (int j = 0; j < frame.size(); ++j) {
+		frame[j]->velocityDrivenInitialization(P);
+	}
+	P.insert(P.end(), frame.begin(), frame.end());
+	for (int j = 0; j<numIter; ++j) {
+		for (int i = 0; i < P.size(); ++i)
+		{
+			P[i]->update0(sigma, P[i]->Threshold, rate);
+		}
+		for (int i = 0; i < P.size(); ++i)
+		{
+			P[i]->update();
+		}
+	}
+}
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
 	printf("%s: This build was compiled at %s %s\n", "GroupPoints", __DATE__, __TIME__);
@@ -89,20 +126,39 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	PointLight::_id = 0;
 
-	vector<PointLight*> P;
+	vector<vector<PointLight*>> frames;
 	{
 		vector<float> P0;
 		const int* dimsP;
 		mxClassID classIdP;
 		int ndimP;
 		LoadData(P0, prhs[0], classIdP, ndimP, &dimsP);
+		vector<float> vf;
+		map<float, int> fmap;
+		for (int i = 0; i < dimsP[0]; ++i)
+		{
+			float fr = GetData2(P0, i, 2, dimsP[0], dimsP[1], (float)0);
+			if (fmap.find(fr) == fmap.end())
+			{
+				fmap[fr] = frames.size();
+				vf.push_back(fr);
+			}
+		}
+		sort(vf.begin(), vf.end());
+		for (int i = 0; i < vf.size(); ++i)
+		{
+			fmap[vf[i]] = i;
+		}
+		frames = vector<vector<PointLight*>>(vf.size());
 		for (int i = 0; i < dimsP[0]; ++i)
 		{
 			float x = GetData2(P0, i, 0, dimsP[0], dimsP[1], (float)0);
 			float y = GetData2(P0, i, 1, dimsP[0], dimsP[1], (float)0);
 			float fr = GetData2(P0, i, 2, dimsP[0], dimsP[1], (float)0);
 			float gid = GetData2(P0, i, 3, dimsP[0], dimsP[1], (float)0);
-			P.push_back(new PointLight(x, y, fr, gid));
+			PointLight* pl = new PointLight(x, y, fr, gid);
+			int k = fmap[fr];
+			frames[k].push_back(pl);
 		}
 	}
 
@@ -119,24 +175,19 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		ReadScalar(sigma, prhs[2], classMode);
 	}
 	float rate = 0.25;
+	int numInitFrames = 5;
 
-	for (int i = 0; i < P.size(); ++i)
+	vector<PointLight*> P;
+	for (int i = 0; i < numInitFrames; ++i)
 	{
-		P[i]->initialize(P);
+		P.insert(P.end(), frames[i].begin(), frames[i].end());
 	}
+	setupInitialFrames(P, numIter, rate, sigma);
 
-	for (int i = 0; i<numIter; ++i) {
-		printf("Iteration %d: \n", i);
-		for (int i = 0; i < P.size(); ++i)
-		{
-			P[i]->update0(sigma, P[i]->Threshold, rate);
-		}
-		for (int i = 0; i < P.size(); ++i)
-		{
-			P[i]->update();
-		}
+	for (int i = numInitFrames; i < frames.size(); ++i)
+	{
+		addFrame(P, frames[i], numIter, rate, sigma);
 	}
-
 	vector<int> labels = clusterPoints(P);
 
 	if (nlhs >= 1)

@@ -22,7 +22,8 @@ struct PointLight
 		gid = g;
 	}
 
-	void initialize(vector<PointLight*>& points);
+	void velocityFreeInitialization(vector<PointLight*>& points);
+	void velocityDrivenInitialization(vector<PointLight*>& points);
 	void update0(float sigma, float thres, float rate);
 	void update()
 	{
