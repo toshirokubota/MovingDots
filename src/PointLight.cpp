@@ -1,4 +1,5 @@
 #include <PointLight.h>
+#include <szMiscOperations.h>
 
 float
 _Distance(PointLight* p, PointLight* q)
@@ -8,290 +9,157 @@ _Distance(PointLight* p, PointLight* q)
 }
 
 /*
-Compute the average location of p at the frame of q.
-Then find the distance between the two locations at the frame.
+Measure how p is compatible to q.
+This assumes causality, thus p has to be later frame than q to be compatible.
 */
 float
-_PredictedDistance(PointLight* p, PointLight* q)
+PointLight::_Compatibility(Candidate& a, Candidate& b)
 {
-	float vx = 0, vy = 0;
-	for (int i = 0; i < p->prevC.size(); ++i)
+	float sgm = 10.0f;
+	if (a.tp.q == b.tp.q) return 0.0f; //this happens for points in the first or last frames as well as isolated points.
+	float val = 0;
+	if (a.tp.p == b.tp.q && a.tp.q == b.tp.r)
 	{
-		vx += p->prevP[i] * (p->x - p->prevC[i]->x) / (p->frame - p->prevC[i]->frame);
-		vy += p->prevP[i] * (p->y - p->prevC[i]->y) / (p->frame - p->prevC[i]->frame);
+		CParticleF a0 = a.tp.evaluate(a.tp.q->frame);
+		CParticleF a1 = a.tp.evaluate(a.tp.p->frame);
+		CParticleF b0 = b.tp.evaluate(b.tp.q->frame);
+		CParticleF b1 = b.tp.evaluate(b.tp.r->frame);
+		float d1 = Distance(a0, b1);
+		float d2 = Distance(a1, b0);
+		val = exp(-(d1*d1 + d2*d2) / (2 * sgm*sgm));
 	}
-	float xp = p->x + vx * (q->frame - p->frame);
-	float yp = p->y + vy * (q->frame - p->frame);
-	return sqrt((xp - q->x)*(xp - q->x) + (yp - q->y)*(yp - q->y));
+	else if (a.tp.r == b.tp.q && a.tp.q == b.tp.p)
+	{
+		CParticleF a0 = a.tp.evaluate(a.tp.q->frame);
+		CParticleF a1 = a.tp.evaluate(a.tp.r->frame);
+		CParticleF b0 = b.tp.evaluate(b.tp.q->frame);
+		CParticleF b1 = b.tp.evaluate(b.tp.p->frame);
+		float d1 = Distance(a0, b1);
+		float d2 = Distance(a1, b0);
+		val = exp(-(d1*d1 + d2*d2) / (2 * sgm*sgm));
+	}
+	else
+	{
+		val = 0.0f;
+	}
+	return val;
 }
-
-float
-_Continuity(PointLight* p, PointLight* q, int m, int n, float sgm)
-{
-	vector<float> pvals;
-	vector<PointLight*> cand;
-	if (p->frame < q->frame)
-	{
-		pvals = p->prevP;
-		cand = p->prevC;
-	}
-	else if(p->frame > q->frame)
-	{
-		pvals = p->nextP;
-		cand = p->nextC;
-	}
-	else {
-		return 0;
-	}
-
-	//find the average landing point given the candidates
-	float nx = 0, ny = 0, nf = q->frame - p->frame;
-	for (int i = 0; i < pvals.size(); ++i)
-	{
-		PointLight* r = i < cand.size() ? cand[i] : p;
-		float df = r->frame - p->frame;
-		if (Abs(df) > 0)
-		{
-			float vx = (r->x - p->x) / df;
-			float vy = (r->y - p->y) / df;
-			nx += pvals[i] * vx * nf;
-			ny += pvals[i] * vy * nf;
-		}
-	}
-	float px = p->x + nx;  //predicted x
-	float py = p->y + ny;  //predicted y
-	float ee = (q->x - px) * (q->x - px) + (q->y - py)*(q->y - py);
-	return exp(-ee / (2.*sgm*sgm));
-}
-
-float
-_Compatibility(PointLight* p, PointLight* q, int m, int n, float sgm)
-{
-	float c = (_Continuity(p, q, m, n, sgm) + _Continuity(q, p, n, m, sgm)) / 2.0f;
-	float d = _Distance(p, q);
-	float w = exp(-d*d / (2 * sgm*sgm));
-	float ee = w * d + (1.0 - w)* c;
-	return exp(-ee * ee/ (2.*sgm*sgm));
-}
-
-PointLight*
-PointLight::nextWinner()
-{
-	PointLight* winner = NULL;
-	if (nextC.size() > 0)
-	{
-		float maxp = nextP[nextC.size()];
-		for (int i = 0; i < nextC.size(); ++i)
-		{
-			if (nextP[i] > maxp)
-			{
-				winner = nextC[i];
-				maxp = nextP[i];
-			}
-		}
-	}
-	return winner;
-}
-
-PointLight*
-PointLight::prevWinner()
-{
-	PointLight* winner = NULL;
-	if (prevC.size() > 0)
-	{
-		float maxp = prevP[prevC.size()];
-		for (int i = 0; i < prevC.size(); ++i)
-		{
-			if (prevP[i] > maxp)
-			{
-				winner = prevC[i];
-				maxp = prevP[i];
-			}
-		}
-	}
-	return winner;
-}
-
 
 void
 PointLight::print(char* tab, char* newl)
 {
 	if (tab != NULL) printf("%s", tab);
 	printf("%d(%3.3f,%3.3f,%f) [", id, x, y, frame);
-	for (int i = 0; i < prevC.size(); ++i)
-	{
-		printf("%3.3f(%d) ", prevP[i], prevC[i]->id);
-	}
-	printf("%3.3f], [", prevP[prevC.size()]);
-	for (int i = 0; i < nextC.size(); ++i)
-	{
-		printf("%3.3f(%d) ", nextP[i], nextC[i]->id);
-	}
-	printf("%3.3f]", nextP[nextC.size()]);
 	if (newl != NULL) printf("%s", newl);
 }
 
-/*
-Using previous and future frames, find likely candidates for this point in both previous and future frames.
-This is used to initialize points at the beginning of a video where little velocity informaiton is available.
-*/
 void
-PointLight::velocityFreeInitialization(vector<PointLight*>& points)
+PointLight::initializeProb()
 {
-	vector<pair<float, PointLight*>> prevPairs;
-	vector<pair<float, PointLight*>> nextPairs;
-	int  range = 10;
-	for (int i = 0; i < points.size(); ++i)
+	int n = candidates.size();
+	for (int i = 0; i < candidates.size(); ++i)
 	{
-		if (points[i] == this) continue;
-		float df = this->frame - points[i]->frame;
-		if (Abs(df) <= range)
-		{
-			if (df > 0)
-			{
-				prevPairs.push_back(pair<float, PointLight*>(_Distance(this, points[i]), points[i]));
-			}
-			else if (df < 0)
-			{
-				nextPairs.push_back(pair<float, PointLight*>(_Distance(this, points[i]), points[i]));
-			}
-		}
+		candidates[i].prob = 1.0 / (n + 1.0);
 	}
-	sort(prevPairs.begin(), prevPairs.end());
-	sort(nextPairs.begin(), nextPairs.end());
-	for (int i = 0; i < Min(prevPairs.size(), NumCandidates); ++i)
-	{
-		PointLight* p = prevPairs[i].second;
-		prevC.push_back(p);
-	}
-	for (int i = 0; i < Min(nextPairs.size(), NumCandidates); ++i)
-	{
-		PointLight* p = nextPairs[i].second;
-		nextC.push_back(p);
-	}
-
-	prevP = vector<float>(prevC.size() + 1, 1.0 / (prevC.size() + 1));
-	nextP = vector<float>(nextC.size() + 1, 1.0 / (nextC.size() + 1));
-	prevP0 = prevP;
-	nextP0 = nextP;
 }
 
-/*
-Using previous frames, find likely candidates for this point in the previous frames.
-*/
-void
-PointLight::velocityDrivenInitialization(vector<PointLight*>& points)
-{
-	vector<pair<float, PointLight*>> prevPairs;
-	int  range = 10;
-	for (int i = 0; i < points.size(); ++i)
+PointLight::PointLightTriple 
+PointLight::winner()
+{ 
+	float maxP = 0;
+	float totalP = 0;
+	int idx = -1;
+	for (int i = 0; i < candidates.size(); ++i)
 	{
-		if (points[i] == this) continue;
-		float df = this->frame - points[i]->frame;
-		if (Abs(df) <= range)
+		if (candidates[i].prob > maxP)
 		{
-			if (df > 0)
-			{
-				prevPairs.push_back(pair<float, PointLight*>(_PredictedDistance(this, points[i]), points[i]));
-			}
+			maxP = candidates[i].prob;
+			idx = i;
 		}
+		totalP += candidates[i].prob;
 	}
-	sort(prevPairs.begin(), prevPairs.end());
-	for (int i = 0; i < Min(prevPairs.size(), NumCandidates); ++i)
+	float eta = 1.0 - totalP;
+	if (eta > maxP)
 	{
-		PointLight* p = prevPairs[i].second;
-		prevC.push_back(p);
-		p->nextC.push_back(this);
+		return PointLightTriple(NULL, this, NULL);
 	}
-	prevP = vector<float>(prevC.size() + 1, 1.0 / (prevC.size() + 1));
-	prevP0 = prevP;
-
-	for (int i = 0; i < prevC.size(); ++i)
+	else
 	{
-		prevC[i]->nextC.push_back(this);
-		prevC[i]->nextP = vector<float>(prevC[i]->nextC.size() + 1, 1.0 / (prevC[i]->nextC.size() + 1));
-		prevC[i]->nextP0 = prevC[i]->nextP;
+		return candidates[idx].tp;
 	}
 }
 
 void
-PointLight::update0(float sigma, float thres, float rate)
+PointLight::updateFitness()
 {
+	for (int i = 0; i < candidates.size(); ++i)
 	{
-		int numc1 = this->prevC.size();
-		if (numc1)
+		float s = 0;
+		for (int j = 0; j < candidates[i].tp.p->candidates.size(); ++j)
 		{
-			float total_sum = 0;
-			vector<float> comp(numc1, 0.0f);
-			for (int m = 0; m < numc1; ++m)
+			float val = _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob;
+			s += val;
+			/*if (val > 0)
 			{
-				PointLight* p = this->prevC[m];
-				for (int m2 = 0; m2 < p->nextC.size(); ++m2)
+				if ((id == 39 && (i == 6 || i == 8)))
 				{
-					if (p->nextC[m2] == this)
-					{
-						comp[m] += p->nextP[m2] * _Compatibility(this, p, m, m2, sigma);
-						break;
-					}
+					printf("(%d %d %d)- (%d %d %d) %f %f\n",
+						candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
+						candidates[i].tp.p->candidates[j].tp.p->id, candidates[i].tp.p->candidates[j].tp.q->id, candidates[i].tp.p->candidates[j].tp.r->id,
+						val, s);
 				}
-				total_sum += prevP[m] * comp[m];
-			}
-			if (total_sum > 1.0e-5)
-			{
-				for (int m = 0; m < numc1; ++m)
-				{
-					prevP0[m] = prevP[m] * comp[m] / (total_sum + prevP[numc1] * thres);
-				}
-				prevP0[numc1] = prevP[numc1] * thres / (total_sum + prevP[numc1] * thres);
-			}
-			else
-			{
-				for (int m = 0; m < numc1; ++m)
-				{
-					this->prevP0[m] = 0.0f;
-				}
-				this->prevP0[numc1] = 1.0f;
-			}
+			}*/
+			//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob);
 		}
-	}
-	
-	{
-		int numc1 = this->nextC.size();
-		if (numc1 > 0)
+		for (int j = 0; j < candidates[i].tp.r->candidates.size(); ++j)
 		{
-			float total_sum = 0;
-			vector<float> comp(numc1, 0.0f);
-			for (int m = 0; m < numc1; ++m)
+			float val = _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob;
+			s += val;
+			/*if (val > 0)
 			{
-				PointLight* p = this->nextC[m];
-				for (int m2 = 0; m2 < p->prevC.size(); ++m2)
+				if ((id == 39 && (i == 6 || i == 8)))
 				{
-					if (p->prevC[m2] == this)
-					{
-						comp[m] += p->prevP[m2] * _Compatibility(this, p, m, m2, sigma);
-						break;
-					}
+					printf("(%d %d %d)- (%d %d %d) %f %f\n", 
+						candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
+						candidates[i].tp.r->candidates[j].tp.p->id, candidates[i].tp.r->candidates[j].tp.q->id, candidates[i].tp.r->candidates[j].tp.r->id,
+						val, s);
 				}
-				total_sum += nextP[m] * comp[m];
-			}
-			if (total_sum > 1.0e-5)
-			{
-				for (int m = 0; m < numc1; ++m)
-				{
-					nextP0[m] = nextP[m] * comp[m] / (total_sum + nextP[numc1] * thres);
-				}
-				nextP0[numc1] = nextP[numc1] * thres / (total_sum + nextP[numc1] * thres);
-			}
-			else
-			{
-				for (int m = 0; m < numc1; ++m)
-				{
-					this->nextP0[m] = 0.0f;
-				}
-				this->nextP0[numc1] = 1.0f;
-			}
+			}*/
+			//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob);
 		}
+		candidates[i].comp = s;
+		/*if (id == 99 || id == 100 || id == 40 || id == 39 || id == 41 || id == 101)
+		{
+			if (candidates[i].comp > 0.1)
+			{
+				printf("F %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
+					candidates[i].comp, candidates[i].prob);
+			}
+		}*/
 	}
 }
 
-
+void
+PointLight::updateProb()
+{
+	float totalP = 0;
+	float total = 0;
+	for (int i = 0; i < candidates.size(); ++i)
+	{
+		total += candidates[i].comp * candidates[i].prob;
+		totalP += candidates[i].prob;
+	}
+	float eta = 0; // totalP >= 1.0 ? 0.0f : (1.0 - totalP) * Threshold;
+	for (int i = 0; i < candidates.size(); ++i)
+	{
+		candidates[i].prob = candidates[i].comp * candidates[i].prob / (total + eta);
+		/*if (id == 99 || id == 100 || id == 40 || id == 39 || id==41 || id==101)
+		{
+			if (candidates[i].prob > 0.1)
+			{
+				printf("P %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id, 
+					candidates[i].comp, candidates[i].prob);
+			}
+		}*/
+	}
+}

@@ -8,11 +8,59 @@ using namespace std;
 #include <szMexUtility.h>
 #include <Feature.h>
 #include <mex.h>
+#include <szParticleF.h>
 
 struct PointLight
 {
+	struct PointLightTriple
+	{
+		PointLightTriple(PointLight* p, PointLight* q, PointLight* r)
+		{
+			this->p = p;
+			this->q = q;
+			this->r = r;
+			v[0] = q->x;
+			v[3] = q->y;
+			if (r != NULL && p != NULL)
+			{
+				v[1] = (r->x - p->x) / (r->frame - p->frame);
+				v[4] = (r->y - p->y) / (r->frame - p->frame);
+			}
+			else
+			{
+				v[1] = 0;
+				v[4] = 0;
+			}
+			v[2] = 0;
+			v[5] = 0;
+		}
+		CParticleF evaluate(float frame)
+		{
+			float t = frame - q->frame;
+			float x = v[0] + t * v[1];
+			float y = v[3] + t * v[4];
+			return CParticleF(x, y);
+		}
+		PointLight* p;
+		PointLight* q;
+		PointLight* r;
+		float v[6];
+	};
+	struct Candidate
+	{
+		Candidate(PointLight* p, PointLight* q, PointLight* r) : tp(p, q, r)
+		{
+			comp = 0; // _Compatibility(p, q, sigma);
+			prob = 0;
+		}
+		PointLightTriple tp;
+		float comp; //compatibility
+		float prob;
+	};
+
 	const float Threshold = 0.01;
-	const int NumCandidates = 5;
+	const int MaxNumNeighbors = 5;
+	const int MaxNumCandidates = MaxNumNeighbors * MaxNumNeighbors;
 	PointLight(float x0 = 0, float y0 = 0, float fr = 0, int g = 0)
 	{
 		x = x0;
@@ -22,23 +70,11 @@ struct PointLight
 		gid = g;
 	}
 
-	void velocityFreeInitialization(vector<PointLight*>& points);
-	void velocityDrivenInitialization(vector<PointLight*>& points);
-	void update0(float sigma, float thres, float rate);
-	void update()
-	{
-		for (int i = 0; i < prevP.size(); ++i)
-		{
-			prevP[i] = prevP0[i];
-		}
-		for (int i = 0; i < nextP.size(); ++i)
-		{
-			nextP[i] = nextP0[i];
-		}
-	}
 	void print(char* tab=NULL, char* newl=NULL);
-	PointLight* prevWinner();
-	PointLight* nextWinner();
+	void updateFitness();
+	void updateProb();
+	void initializeProb();
+	PointLightTriple winner();
 
 	float x;
 	float y;
@@ -46,14 +82,9 @@ struct PointLight
 	int id;
 	int gid; //group id for debuggin.
 
-	vector<PointLight*> prevC; //possible correspondences from prev frame
-	vector<PointLight*> nextC; //possible correspondences from prev frame
-	vector<float> prevP;
-	vector<float> nextP;
+	vector<Candidate> candidates; //possible correspondences from prev frame
 
-	vector<float> prevP0; //temporary copy of inter-framce correspondence probability
-	vector<float> nextP0; //temporary copy of inter-framce correspondence probability
-
+	static float _Compatibility(Candidate& a, Candidate& b);
 	static int _id;
 };
 

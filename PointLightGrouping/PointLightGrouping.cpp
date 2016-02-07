@@ -29,15 +29,23 @@ clusterPoints(vector<PointLight*>& points)
 		nodes.push_back(makeset(points[i]));
 		pmap[points[i]] = i;
 	}
-	bool bError = false;
-	for (int i = 0; !bError && i < points.size(); ++i)
+	for (int i = 0; i < points.size(); ++i)
 	{
-		PointLight* w = points[i]->nextWinner();
-		if (w != NULL)
+		PointLight::PointLightTriple w = points[i]->winner();
+		if (w.p != NULL)
 		{
-			if (points[i] == w->prevWinner()) 
+			PointLight::PointLightTriple wp = w.p->winner();
+			if (wp.r == points[i]) 
 			{
-				merge(nodes[i], nodes[pmap[w]]);
+				merge(nodes[i], nodes[pmap[w.p]]);
+			}
+		}
+		if (w.r != NULL)
+		{
+			PointLight::PointLightTriple wr = w.r->winner();
+			if (wr.p == points[i])
+			{
+				merge(nodes[i], nodes[pmap[w.r]]);
 			}
 		}
 	}
@@ -59,14 +67,6 @@ clusterPoints(vector<PointLight*>& points)
 		for (int j = i + 1; j < nodes.size(); ++j)
 		{
 			PointLight* q = nodes[j]->key;
-			if (p->frame == q->frame)
-			{
-				if (findset(nodes[i]) == findset(nodes[j]))
-				{
-					p->print(NULL, "\n");
-					q->print(">> ", "\n");
-				}
-			}
 		}
 		int k = cmap[findset(nodes[i])->key];
 		labels[i] = k;
@@ -78,44 +78,134 @@ clusterPoints(vector<PointLight*>& points)
 	return labels;
 }
 
+vector<vector<PointLight*>>
+organizeIntoFrames(vector<PointLight*>& P)
+{
+	vector<pair<float, PointLight*>> pairs(P.size());
+	for (int i = 0; i < P.size(); ++i)
+	{
+		pairs[i].first = P[i]->frame;
+		pairs[i].second = P[i];
+	}
+	sort(pairs.begin(), pairs.end());
+	vector<vector<PointLight*>> frames;
+	vector<PointLight*> frame;
+	for (int i = 0; i < pairs.size(); ++i)
+	{
+		if (frame.empty() || frame[0]->frame == pairs[i].first)
+		{
+			frame.push_back(pairs[i].second);
+		}
+		else
+		{
+			frames.push_back(frame);
+			frame.clear();
+			frame.push_back(pairs[i].second);
+		}
+	}
+	frames.push_back(frame);
+	return frames;
+}
+
+bool
+isRedundant(PointLight* p, PointLight* q, vector<PointLight*>& Q, float thres)
+{
+	CParticleF p0(p->x, p->y);
+	CParticleF q0(q->x, q->y);
+	for (int i = 0; i < Q.size(); ++i)
+	{
+		CParticleF x(Q[i]->x, Q[i]->y);
+		CParticleF c = Closest2Line(p0, q0, x);
+		if (Distance(x, c) < thres)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void
-setupInitialFrames(vector<PointLight*>& P, int numIter, float rate, float sigma)
+initialize(vector<PointLight*>& points, int range, float radius)
+{
+	vector<vector<PointLight*>> frames = organizeIntoFrames(points);
+	float thres = radius / 10.0f;
+	for (int i = 0; i < frames.size(); ++i)
+	{
+		for (int j = 0; j < frames[i].size(); j++)
+		{
+			vector<PointLight*> prev;
+			PointLight* p = frames[i][j];
+			for (int k = i - 1; k >= Max(0, i - range); k--)
+			{
+				vector<PointLight*> Q;
+				for (int m = 0; m < frames[k].size(); ++m)
+				{
+					PointLight* q = frames[k][m];
+					if (Distance(p->x, p->y, q->x, q->y) < radius)
+					{
+						if (isRedundant(p, q, prev, thres) == false)
+						{
+							Q.push_back(q);
+						}
+					}
+				}
+				prev.insert(prev.end(), Q.begin(), Q.end());
+				if (prev.size() >= p->MaxNumNeighbors) break;
+			}
+			if (prev.empty()) prev.push_back(p);
+
+			vector<PointLight*> next;
+			for (int k = i + 1; k <= Min(frames.size() - 1, i + range); k++)
+			{
+				vector<PointLight*> Q;
+				for (int m = 0; m < frames[k].size(); ++m)
+				{
+					PointLight* q = frames[k][m];
+					if (Distance(p->x, p->y, q->x, q->y) < radius)
+					{
+						if (isRedundant(p, q, next, thres) == false)
+						{
+							Q.push_back(q);
+						}
+					}
+				}
+				next.insert(next.end(), Q.begin(), Q.end());
+				if (next.size() >= p->MaxNumNeighbors) break;
+			}
+			if (next.empty()) next.push_back(p);
+
+			for (int j = 0; j < prev.size(); ++j)
+			{
+				for (int k = 0; k < next.size(); ++k)
+				{
+					p->candidates.push_back(PointLight::Candidate(prev[j], p, next[k]));
+				}
+			}
+			p->initializeProb();
+		}
+	}
+}
+
+void
+update(vector<PointLight*>& P)
 {
 	for (int i = 0; i < P.size(); ++i)
 	{
-		P[i]->velocityFreeInitialization(P);
-	}
-
-	for (int i = 0; i<numIter; ++i) {
-		for (int i = 0; i < P.size(); ++i)
+		if (P[i]->candidates.empty() == false)
 		{
-			P[i]->update0(sigma, P[i]->Threshold, rate);
-		}
-		for (int i = 0; i < P.size(); ++i)
-		{
-			P[i]->update();
+			P[i]->updateFitness();
+			P[i]->updateProb();
 		}
 	}
-}
-
-void
-addFrame(vector<PointLight*>& P, vector<PointLight*>& frame, int numIter, float rate, float sigma)
-{
-	for (int j = 0; j < frame.size(); ++j) {
-		frame[j]->velocityDrivenInitialization(P);
-	}
-	P.insert(P.end(), frame.begin(), frame.end());
-	for (int j = 0; j<numIter; ++j) {
-		for (int i = 0; i < P.size(); ++i)
+	for (int i = 0; i < P.size(); ++i)
+	{
+		if (P[i]->candidates.empty() == false)
 		{
-			P[i]->update0(sigma, P[i]->Threshold, rate);
-		}
-		for (int i = 0; i < P.size(); ++i)
-		{
-			P[i]->update();
+			//P[i]->updateProb();
 		}
 	}
 }
+
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
 	printf("%s: This build was compiled at %s %s\n", "GroupPoints", __DATE__, __TIME__);
@@ -126,30 +216,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	PointLight::_id = 0;
 
-	vector<vector<PointLight*>> frames;
+	vector<PointLight*> P;
 	{
 		vector<float> P0;
 		const int* dimsP;
 		mxClassID classIdP;
 		int ndimP;
 		LoadData(P0, prhs[0], classIdP, ndimP, &dimsP);
-		vector<float> vf;
-		map<float, int> fmap;
-		for (int i = 0; i < dimsP[0]; ++i)
-		{
-			float fr = GetData2(P0, i, 2, dimsP[0], dimsP[1], (float)0);
-			if (fmap.find(fr) == fmap.end())
-			{
-				fmap[fr] = frames.size();
-				vf.push_back(fr);
-			}
-		}
-		sort(vf.begin(), vf.end());
-		for (int i = 0; i < vf.size(); ++i)
-		{
-			fmap[vf[i]] = i;
-		}
-		frames = vector<vector<PointLight*>>(vf.size());
 		for (int i = 0; i < dimsP[0]; ++i)
 		{
 			float x = GetData2(P0, i, 0, dimsP[0], dimsP[1], (float)0);
@@ -157,8 +230,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 			float fr = GetData2(P0, i, 2, dimsP[0], dimsP[1], (float)0);
 			float gid = GetData2(P0, i, 3, dimsP[0], dimsP[1], (float)0);
 			PointLight* pl = new PointLight(x, y, fr, gid);
-			int k = fmap[fr];
-			frames[k].push_back(pl);
+			P.push_back(pl);
 		}
 	}
 
@@ -175,24 +247,18 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		ReadScalar(sigma, prhs[2], classMode);
 	}
 	float rate = 0.25;
-	int numInitFrames = 5;
 
-	vector<PointLight*> P;
-	for (int i = 0; i < numInitFrames; ++i)
+	initialize(P, 5, 50.0);
+	for (int i = 0; i < numIter; ++i)
 	{
-		P.insert(P.end(), frames[i].begin(), frames[i].end());
-	}
-	setupInitialFrames(P, numIter, rate, sigma);
-
-	for (int i = numInitFrames; i < frames.size(); ++i)
-	{
-		addFrame(P, frames[i], numIter, rate, sigma);
+		printf("Iteration %d\n", i + 1);
+		update(P);
 	}
 	vector<int> labels = clusterPoints(P);
 
 	if (nlhs >= 1)
 	{
-		const int dims[] = { P.size(), 4 };
+		const int dims[] = { P.size(), 5 };
 		vector<float> F(dims[0] * dims[1]);
 		for (int i = 0; i < dims[0]; ++i)
 		{
@@ -201,6 +267,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 			SetData2(F, i, 1, dims[0], dims[1], p->y);
 			SetData2(F, i, 2, dims[0], dims[1], p->frame);
 			SetData2(F, i, 3, dims[0], dims[1], (float)p->id);
+			SetData2(F, i, 4, dims[0], dims[1], (float)p->gid);
 		}
 		plhs[0] = StoreData(F, mxSINGLE_CLASS, 2, dims);
 	}
@@ -216,36 +283,20 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	if (nlhs >= 3)
 	{
-		int nc = P[0]->NumCandidates;
-		const int dims[] = { P.size(), 4 + 2 * nc + 2 * nc };
-		vector<float> F(dims[0] * dims[1], -1.0f);
+		int nc = P[0]->MaxNumCandidates;
+		const int dims[] = { P.size(), nc};
+		vector<int> F(dims[0] * dims[1], -1);
 		for (int i = 0; i < dims[0]; ++i)
 		{
 			PointLight* p = P[i];
-			SetData2(F, i, 0, dims[0], dims[1], (float)p->id);
-			SetData2(F, i, 1, dims[0], dims[1], p->x);
-			SetData2(F, i, 2, dims[0], dims[1], p->y);
-			SetData2(F, i, 3, dims[0], dims[1], p->frame);
-			int k = 4;
-			for (int j = 0; j < nc; ++j)
+			for (int j = 0, k=0; j < P[i]->candidates.size(); ++j)
 			{
-				if (j < p->prevC.size())
-				{
-					SetData2(F, i, k++, dims[0], dims[1], (float)p->prevC[j]->id);
-					SetData2(F, i, k++, dims[0], dims[1], (float)p->prevP[j]);
-				}
-			}
-			k = 4 + 2 * nc;
-			for (int j = 0; j < nc; ++j)
-			{
-				if (j < p->nextC.size())
-				{
-					SetData2(F, i, k++, dims[0], dims[1], (float)p->nextC[j]->id);
-					SetData2(F, i, k++, dims[0], dims[1], (float)p->nextP[j]);
-				}
+				SetData2(F, i, k++, dims[0], dims[1], P[i]->candidates[j].tp.p->id);
+				SetData2(F, i, k++, dims[0], dims[1], P[i]->candidates[j].tp.q->id);
+				SetData2(F, i, k++, dims[0], dims[1], P[i]->candidates[j].tp.r->id);
 			}
 		}
-		plhs[2] = StoreData(F, mxSINGLE_CLASS, 2, dims);
+		plhs[2] = StoreData(F, mxINT32_CLASS, 2, dims);
 	}
 
 	for (int i = 0; i < P.size(); ++i)
