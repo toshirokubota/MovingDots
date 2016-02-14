@@ -107,6 +107,9 @@ organizeIntoFrames(vector<PointLight*>& P)
 	return frames;
 }
 
+/*
+Check if there is already a point that is closely aligned to the line p-q and is temporarily closer to p.
+*/
 bool
 isRedundant(PointLight* p, PointLight* q, vector<PointLight*>& Q, float thres)
 {
@@ -193,17 +196,44 @@ update(vector<PointLight*>& P)
 	{
 		if (P[i]->candidates.empty() == false)
 		{
+			//P[i]->updateParams();
 			P[i]->updateFitness();
-			P[i]->updateProb();
+			//P[i]->updateProb();
 		}
 	}
 	for (int i = 0; i < P.size(); ++i)
 	{
 		if (P[i]->candidates.empty() == false)
 		{
-			//P[i]->updateProb();
+			P[i]->updateProb();
 		}
 	}
+}
+
+vector<PointLight*>
+removeDuplicates(vector<PointLight*>& P, float thres)
+{
+	vector<PointLight*> keep;
+	for (int i = P.size() - 1; i >= 0; i--)
+	{
+		PointLight* p = P[i];
+		bool bKeep = true;
+		for (int j = i - 1; j >= 0; j--)
+		{
+			PointLight* q = P[j];
+			if (p->frame == q->frame && Distance(p->x, p->y, q->x, q->y) < thres)
+			{
+				printf("remove %d(%f, %f)\n", p->id, p->x, p->y);
+				bKeep = false;
+				break;
+			}
+		}
+		if (bKeep)
+		{
+			keep.insert(keep.begin(), p);
+		}
+	}
+	return keep;
 }
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
@@ -232,6 +262,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 			PointLight* pl = new PointLight(x, y, fr, gid);
 			P.push_back(pl);
 		}
+		//P = removeDuplicates(P, 5.0);
 	}
 
 	int numIter = 1;
@@ -248,7 +279,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	float rate = 0.25;
 
-	initialize(P, 5, 50.0);
+	initialize(P, 5, 70.0);
 	for (int i = 0; i < numIter; ++i)
 	{
 		printf("Iteration %d\n", i + 1);
