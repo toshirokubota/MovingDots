@@ -22,21 +22,33 @@ PointLight::_Compatibility(Candidate& a, Candidate& b)
 	{
 		CParticleF a0 = a.tp.evaluate(a.tp.q->frame);
 		CParticleF a1 = a.tp.evaluate(a.tp.p->frame);
-		CParticleF b0 = b.tp.evaluate(b.tp.q->frame);
-		CParticleF b1 = b.tp.evaluate(b.tp.r->frame);
-		float d1 = Distance(a0, b1);
-		float d2 = Distance(a1, b0);
-		val = exp(-(d1*d1 + d2*d2) / (2 * sgm*sgm));
+		CParticleF b0 = b.tp.evaluate(a.tp.q->frame);
+		CParticleF b1 = b.tp.evaluate(a.tp.p->frame);
+		float d1 = Distance(a0, b0);
+		float d2 = Distance(a1, b1);
+		CParticleF u0 = a.tp.velocity(a.tp.q->frame);
+		CParticleF u1 = a.tp.velocity(a.tp.p->frame);
+		CParticleF v0 = b.tp.velocity(a.tp.q->frame);
+		CParticleF v1 = b.tp.velocity(a.tp.p->frame);
+		float d3 = Distance(u0, v0);
+		float d4 = Distance(u1, v1);
+		val = exp(-(d1*d1 + d2*d2 + d3*d3 + d4*d4) / (2 * sgm*sgm));
 	}
 	else if (a.tp.r == b.tp.q && a.tp.q == b.tp.p)
 	{
 		CParticleF a0 = a.tp.evaluate(a.tp.q->frame);
 		CParticleF a1 = a.tp.evaluate(a.tp.r->frame);
-		CParticleF b0 = b.tp.evaluate(b.tp.q->frame);
-		CParticleF b1 = b.tp.evaluate(b.tp.p->frame);
-		float d1 = Distance(a0, b1);
-		float d2 = Distance(a1, b0);
-		val = exp(-(d1*d1 + d2*d2) / (2 * sgm*sgm));
+		CParticleF b0 = b.tp.evaluate(a.tp.q->frame);
+		CParticleF b1 = b.tp.evaluate(a.tp.r->frame);
+		float d1 = Distance(a0, b0);
+		float d2 = Distance(a1, b1);
+		CParticleF u0 = a.tp.velocity(a.tp.q->frame);
+		CParticleF u1 = a.tp.velocity(a.tp.r->frame);
+		CParticleF v0 = b.tp.velocity(a.tp.q->frame);
+		CParticleF v1 = b.tp.velocity(a.tp.r->frame);
+		float d3 = Distance(u0, v0);
+		float d4 = Distance(u1, v1);
+		val = exp(-(d1*d1 + d2*d2 + d3*d3 + d4*d4) / (2 * sgm*sgm));
 	}
 	else
 	{
@@ -79,7 +91,7 @@ PointLight::winner()
 		totalP += candidates[i].prob;
 	}
 	float eta = 1.0 - totalP;
-	if (eta > maxP)
+	if (eta > maxP || idx < 0)
 	{
 		return PointLightTriple(NULL, this, NULL);
 	}
@@ -89,16 +101,20 @@ PointLight::winner()
 	}
 }
 
+/*
+ETA is a common value added to each candidate. This is to slow down the committment so that the overall configuration does not
+quickly converge to a local optimum.
+*/
 void
 PointLight::updateFitness()
 {
 	for (int i = 0; i < candidates.size(); ++i)
 	{
-		float s = 0;
+		float s1 = Threshold;
 		for (int j = 0; j < candidates[i].tp.p->candidates.size(); ++j)
 		{
 			float val = _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob;
-			s += val;
+			s1 += val;
 			/*if (val > 0)
 			{
 				if ((id == 39 && (i == 6 || i == 8)))
@@ -111,10 +127,11 @@ PointLight::updateFitness()
 			}*/
 			//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob);
 		}
+		float s2 = Threshold;
 		for (int j = 0; j < candidates[i].tp.r->candidates.size(); ++j)
 		{
 			float val = _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob;
-			s += val;
+			s2 += val;
 			/*if (val > 0)
 			{
 				if ((id == 39 && (i == 6 || i == 8)))
@@ -127,18 +144,22 @@ PointLight::updateFitness()
 			}*/
 			//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob);
 		}
-		candidates[i].comp = s;
-		/*if (id == 99 || id == 100 || id == 40 || id == 39 || id == 41 || id == 101)
+		candidates[i].comp = sqrt(s1 * s2);
+		if (id == 39 || id == 20 || id == 30 || id == 29) // || id==41 || id==101)
 		{
 			if (candidates[i].comp > 0.1)
 			{
 				printf("F %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
 					candidates[i].comp, candidates[i].prob);
 			}
-		}*/
+		}
 	}
 }
 
+/*
+ETA is a common value added to each candidate. This is to slow down the committment so that the overall configuration does not
+quickly converge to a local optimum.
+*/
 void
 PointLight::updateProb()
 {
@@ -149,17 +170,104 @@ PointLight::updateProb()
 		total += candidates[i].comp * candidates[i].prob;
 		totalP += candidates[i].prob;
 	}
-	float eta = 0; // totalP >= 1.0 ? 0.0f : (1.0 - totalP) * Threshold;
+	//float eta = Threshold; // totalP >= 1.0 ? 0.0f : (1.0 - totalP) * Threshold;
+	float eta = Threshold;
 	for (int i = 0; i < candidates.size(); ++i)
 	{
 		candidates[i].prob = candidates[i].comp * candidates[i].prob / (total + eta);
-		/*if (id == 99 || id == 100 || id == 40 || id == 39 || id==41 || id==101)
+		if (id == 39 || id == 20 || id == 30 || id == 29) // || id==41 || id==101)
 		{
 			if (candidates[i].prob > 0.1)
 			{
 				printf("P %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id, 
 					candidates[i].comp, candidates[i].prob);
 			}
-		}*/
+		}
+	}
+}
+
+/*
+A convenient method to calculate an intermediate 6-vector for EQW update.
+The vector will need to be multiplied with G vector.
+*/
+void
+_CalculateEQWPairTerm(PointLight::Candidate& a, PointLight::Candidate& b, float res[6], float H[3][3])
+{
+	PointLight*  p = b.tp.q;
+	if (b.tp.q->frame > a.tp.q->frame) {
+		for (int i = 0; i < 3; ++i)
+		{
+			res[i] = H[i][0] * b.tp.v[0] + H[i][1] * b.tp.v[1] + H[i][2] * b.tp.v[2];
+		}
+		for (int i = 0; i < 3; ++i)
+		{
+			res[i+3] = H[i][0] * b.tp.v[3] + H[i][1] * b.tp.v[4] + H[i][2] * b.tp.v[5];
+		}
+	}
+	else
+	{
+		for (int i = 0; i < 3; ++i)
+		{
+			res[i] = H[0][i] * b.tp.v[0] + H[1][i] * b.tp.v[1] + H[2][i] * b.tp.v[2];
+		}
+		for (int i = 0; i < 3; ++i)
+		{
+			res[i + 3] = H[0][i] * b.tp.v[3] + H[1][i] * b.tp.v[4] + H[2][i] * b.tp.v[5];
+		}
+	}
+}
+
+void
+PointLight::updateParams()
+{
+	float r = 1.0f, t = 1.0f;
+	float a = 4 * r + t*t, b = 8 * r + t*t, c = 2 * r + t*t;
+	float G[3][3], H[3][3];
+	G[0][0] = .5*a / b; G[0][1] = -.5 / b; G[0][2] = 0;
+	G[1][0] = -.5 / b; G[1][1] = 1. / (t*t*b); G[1][2] = 0;
+	G[2][0] = 0; G[2][1] = 0; G[2][2] = .5 / c;
+	H[0][0] = -2.; H[0][1] = -t*t; H[0][2] = t;
+	H[1][0] = -t*t; H[1][1] = 0; H[1][2] = -2.*r*t;
+	H[2][0] = -t; H[2][1] = 2.*r*t; H[2][2] = -2.*r;
+
+	for (int i = 0; i < candidates.size(); ++i)
+	{
+		Candidate a = candidates[i];
+		PointLight* p = a.tp.p;
+		PointLight* q = a.tp.q;
+		PointLight* r = a.tp.r;
+		if (p == q || p == r) continue;
+		float res[6] = { 0, 0, 0, 0, 0, 0 };
+		for (int j = 0; j < p->candidates.size(); ++j)
+		{
+			Candidate b = p->candidates[j];
+			if (a.tp.p == b.tp.q && a.tp.q == b.tp.r)
+			{
+				float res0[6];
+				_CalculateEQWPairTerm(a, b, res0, H);
+				for (int k = 0; k < 6; ++k)
+				{
+					res[k] += b.prob * res0[k];
+				}
+			}
+		}
+		for (int j = 0; j < r->candidates.size(); ++j)
+		{
+			Candidate b = r->candidates[j];
+			if (a.tp.r == b.tp.q && a.tp.q == b.tp.p)
+			{
+				float res0[6];
+				_CalculateEQWPairTerm(a, b, res0, H);
+				for (int k = 0; k < 6; ++k)
+				{
+					res[k] += b.prob * res0[k];
+				}
+			}
+		}
+		for (int k = 0; k < 3; ++k)
+		{
+			candidates[i].tp.v[k] = G[k][0] * res[0] + G[k][1] * res[1] + G[k][2] * res[2];
+			candidates[i].tp.v[k+3] = G[k][0] * res[3] + G[k][1] * res[4] + G[k][2] * res[5];
+		}
 	}
 }

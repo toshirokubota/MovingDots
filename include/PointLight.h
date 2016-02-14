@@ -21,24 +21,55 @@ struct PointLight
 			this->r = r;
 			v[0] = q->x;
 			v[3] = q->y;
-			if (r != NULL && p != NULL)
+			if (r != NULL && p != NULL && (p != q || r != q))
 			{
-				v[1] = (r->x - p->x) / (r->frame - p->frame);
-				v[4] = (r->y - p->y) / (r->frame - p->frame);
+				float t = r->frame - q->frame;
+				float s = p->frame - q->frame;
+				if (t == 0 && s == 0)
+				{
+					v[1] = v[2] = v[4] = v[5] = 0;
+				}
+				else if (t == 0)
+				{
+					v[1] = (p->x - q->x) / s;
+					v[4] = (p->y - q->y) / s;
+					v[2] = v[5] = 0;
+				}
+				else if (s == 0)
+				{
+					v[1] = (r->x - q->x) / t;
+					v[4] = (r->y - q->y) / t;
+					v[2] = v[5] = 0;
+				}
+				else
+				{
+					float denom = s * t * (s - t);
+					v[1] = (q->x * (t*t - s*s) + s*s*r->x - t*t*p->x) / denom;
+					v[2] = (q->x*(s - t) - s*r->x + t*p->x) / denom;
+					v[4] = (q->y * (t*t - s*s) + s*s*r->y - t*t*p->y) / denom;
+					v[5] = (q->y*(s - t) - s*r->y + t*p->y) / denom;
+				}
 			}
 			else
 			{
 				v[1] = 0;
+				v[2] = 0;
 				v[4] = 0;
+				v[5] = 0;
 			}
-			v[2] = 0;
-			v[5] = 0;
 		}
 		CParticleF evaluate(float frame)
 		{
 			float t = frame - q->frame;
-			float x = v[0] + t * v[1];
-			float y = v[3] + t * v[4];
+			float x = v[0] + t * v[1] + t*t*v[2];
+			float y = v[3] + t * v[4] + t*t*v[5];
+			return CParticleF(x, y);
+		}
+		CParticleF velocity(float frame)
+		{
+			float t = frame - q->frame;
+			float x = v[1] + 2*t*v[2];
+			float y = v[4] + 2*t*v[5];
 			return CParticleF(x, y);
 		}
 		PointLight* p;
@@ -71,6 +102,7 @@ struct PointLight
 	}
 
 	void print(char* tab=NULL, char* newl=NULL);
+	void updateParams();
 	void updateFitness();
 	void updateProb();
 	void initializeProb();
@@ -85,6 +117,7 @@ struct PointLight
 	vector<Candidate> candidates; //possible correspondences from prev frame
 
 	static float _Compatibility(Candidate& a, Candidate& b);
+	static void _FindOptimumParameters(Candidate& a, Candidate& b, float res[6], float G[3][3], float H[3][3]);
 	static int _id;
 };
 
