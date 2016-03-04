@@ -94,7 +94,7 @@
     <Link>
       <AdditionalOptions>/export:"mexFunction" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>libmx.lib;libmat.lib;libmex.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>C:\Users\kubota\Documents\MATLAB\Dots\$(ProjectName).dll</OutputFile>
+      <OutputFile>C:\Users\kubota\Documents\MATLAB\\Summer2015\AnimalMotion\$(ProjectName).dll</OutputFile>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\MATLAB\R2011b\extern\lib\win32\microsoft;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
@@ -190,6 +190,7 @@
     <ClInclude Include="..\include\Graph.h" />
     <ClInclude Include="..\include\GraphFactory.h" />
     <ClInclude Include="..\include\mexFileIO.h" />
+    <ClInclude Include="..\include\SimplePoint.h" />
     <ClInclude Include="..\include\szMexUtility.h" />
     <ClInclude Include="..\include\szmexutilitytemplate.h" />
     <ClInclude Include="..\include\szMiscOperations.h" />

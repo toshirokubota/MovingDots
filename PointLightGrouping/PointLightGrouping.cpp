@@ -16,6 +16,7 @@ using namespace std;
 #include <szMiscOperations.h>
 #include <PointLight.h>
 #include <DisjointSet.h>
+using namespace _PointLightNS;
 
 int PointLight::_id = 0;
 
@@ -128,112 +129,98 @@ isRedundant(PointLight* p, PointLight* q, vector<PointLight*>& Q, float thres)
 }
 
 void
-initialize(vector<PointLight*>& points, int range, float radius)
+addFrame(vector<PointLight*>& Q, vector<PointLight*>& frame, int range, float thres, float sigma)
 {
-	vector<vector<PointLight*>> frames = organizeIntoFrames(points);
-	float thres = radius / 10.0f;
-	for (int i = 0; i < frames.size(); ++i)
+	for (int i = 0; i < frame.size(); ++i)
 	{
-		for (int j = 0; j < frames[i].size(); j++)
+		PointLight* q = frame[i];
+		vector<pair<float, pair<PointLight*, int>>> pairs;
+		vector<pair<float, pair<PointLight*, int>>> pairs2;
+		if (q->id == 4 || q->id == 124)
 		{
-			vector<PointLight*> prev;
-			PointLight* p = frames[i][j];
-			for (int k = i - 1; k >= Max(0, i - range); k--)
-			{
-				vector<PointLight*> Q;
-				for (int m = 0; m < frames[k].size(); ++m)
-				{
-					PointLight* q = frames[k][m];
-					if (Distance(p->x, p->y, q->x, q->y) < radius)
-					{
-						if (isRedundant(p, q, prev, thres) == false)
-						{
-							Q.push_back(q);
-						}
-					}
-				}
-				prev.insert(prev.end(), Q.begin(), Q.end());
-				if (prev.size() >= p->MaxNumNeighbors) break;
-			}
-			if (prev.empty()) prev.push_back(p);
-
-			vector<PointLight*> next;
-			for (int k = i + 1; k <= Min(frames.size() - 1, i + range); k++)
-			{
-				vector<PointLight*> Q;
-				for (int m = 0; m < frames[k].size(); ++m)
-				{
-					PointLight* q = frames[k][m];
-					if (Distance(p->x, p->y, q->x, q->y) < radius)
-					{
-						if (isRedundant(p, q, next, thres) == false)
-						{
-							Q.push_back(q);
-						}
-					}
-				}
-				next.insert(next.end(), Q.begin(), Q.end());
-				if (next.size() >= p->MaxNumNeighbors) break;
-			}
-			if (next.empty()) next.push_back(p);
-
-			for (int j = 0; j < prev.size(); ++j)
-			{
-				for (int k = 0; k < next.size(); ++k)
-				{
-					p->candidates.push_back(PointLight::Candidate(prev[j], p, next[k]));
-				}
-			}
-			p->initializeProb();
+			i += 0;
 		}
+		for (int j = 0; j < Q.size(); ++j)
+		{
+			if (Abs(q->frame - Q[j]->frame) <= range)
+			{
+				PointLight* p = Q[j];
+				if (p->id == 80 && q->id == 81)
+				{
+					i += 0;
+				}
+				if (p->state != Connected && p->state != Appeared) //need an extension
+				{
+					for (int k = 0; k < p->candidates.size(); ++k)
+					{
+						PointLight::Candidate c(p, q, q);
+						if (PointLight::isStationary(p->candidates[k]))
+						{
+							float cmp = PointLight::_CompatibilityStationary(p->candidates[k], c) * p->candidates[k].prob;
+							pairs2.push_back(pair<float, pair<PointLight*, int>>(cmp, pair<PointLight*, int>(p, k)));
+						}
+						else
+						{
+							PointLight::Candidate c2(p->candidates[k].tp.p, p->candidates[k].tp.q, q);
+							float cmp = PointLight::_Compatibility(c2, c)* p->candidates[k].prob;
+							pairs.push_back(pair<float, pair<PointLight*, int>>(cmp, pair<PointLight*, int>(p, k)));
+						}
+					}
+				}
+			}
+		}
+		sort(pairs.begin(), pairs.end());
+		sort(pairs2.begin(), pairs2.end());
+		for (int j = pairs.size() - 1; j >= Max(0, (int)pairs.size() - MaxNumNeighbors); j--)
+		{
+			if (pairs[j].first < thres) break;
+			PointLight* p = pairs[j].second.first;
+			int k = pairs[j].second.second;
+			q->candidates0.push_back(PointLight::Candidate(p, q, q));
+			//p->candidates[k].tp.r = q;
+			p->candidates0.push_back(PointLight::Candidate(p->candidates[k].tp.p, p->candidates[k].tp.q, q));
+		}
+		float sthres = 0;
+		for (int j = pairs2.size() - 1; j >= 0 && q->candidates.size() < MaxNumNeighbors; j--)
+		{
+			if (pairs2[j].first < sthres) break;
+			PointLight* p = pairs2[j].second.first;
+			int k = pairs2[j].second.second;
+			q->candidates0.push_back(PointLight::Candidate(p, q, q));
+
+			p->candidates0.push_back(PointLight::Candidate(p->candidates[k].tp.p, p->candidates[k].tp.q, q));
+			if (j == pairs2.size() - 1)
+			{
+				sthres = pairs2[j].first / 2.0f;
+			}
+		}		
+		q->candidates0.push_back(PointLight::Candidate(q, q, q)); //always add an isolated candidate
 	}
+	Q.insert(Q.end(), frame.begin(), frame.end());
 }
 
 void
-update(vector<PointLight*>& P)
+update(vector<PointLight*>& P, int niter)
 {
 	for (int i = 0; i < P.size(); ++i)
 	{
-		if (P[i]->candidates.empty() == false)
-		{
-			//P[i]->updateParams();
-			P[i]->updateFitness();
-			//P[i]->updateProb();
-		}
+		P[i]->updateCandidates();
 	}
-	for (int i = 0; i < P.size(); ++i)
+	for (int n = 0; n < niter; ++n)
 	{
-		if (P[i]->candidates.empty() == false)
+		for (int i = 0; i < P.size(); ++i)
+		{
+			P[i]->updateFitness();
+		}
+		for (int i = 0; i < P.size(); ++i)
 		{
 			P[i]->updateProb();
 		}
 	}
-}
-
-vector<PointLight*>
-removeDuplicates(vector<PointLight*>& P, float thres)
-{
-	vector<PointLight*> keep;
-	for (int i = P.size() - 1; i >= 0; i--)
+	for (int i = 0; i < P.size(); ++i)
 	{
-		PointLight* p = P[i];
-		bool bKeep = true;
-		for (int j = i - 1; j >= 0; j--)
-		{
-			PointLight* q = P[j];
-			if (p->frame == q->frame && Distance(p->x, p->y, q->x, q->y) < thres)
-			{
-				printf("remove %d(%f, %f)\n", p->id, p->x, p->y);
-				bKeep = false;
-				break;
-			}
-		}
-		if (bKeep)
-		{
-			keep.insert(keep.begin(), p);
-		}
+		P[i]->updateState();
 	}
-	return keep;
 }
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
@@ -262,7 +249,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 			PointLight* pl = new PointLight(x, y, fr, gid);
 			P.push_back(pl);
 		}
-		//P = removeDuplicates(P, 5.0);
 	}
 
 	int numIter = 1;
@@ -278,12 +264,19 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		ReadScalar(sigma, prhs[2], classMode);
 	}
 	float rate = 0.25;
-
-	initialize(P, 5, 70.0);
-	for (int i = 0; i < numIter; ++i)
+	vector<vector<PointLight*>> frames = organizeIntoFrames(P);
+	int numFrames = frames.size();
+	if (nrhs >= 4)
 	{
-		printf("Iteration %d\n", i + 1);
-		update(P);
+		mxClassID classMode;
+		ReadScalar(numFrames, prhs[3], classMode);
+	}
+
+	vector<PointLight*> Q;
+	for (int k = 0; k < numFrames; ++k)
+	{
+		addFrame(Q, frames[k], 5, 0.1, sigma);
+		update(Q, numIter);
 	}
 	vector<int> labels = clusterPoints(P);
 
@@ -314,7 +307,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	}
 	if (nlhs >= 3)
 	{
-		int nc = P[0]->MaxNumCandidates;
+		int nc = MaxNumCandidates;
 		const int dims[] = { P.size(), nc};
 		vector<int> F(dims[0] * dims[1], -1);
 		for (int i = 0; i < dims[0]; ++i)

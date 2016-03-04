@@ -1,5 +1,6 @@
 #include <PointLight.h>
 #include <szMiscOperations.h>
+using namespace _PointLightNS;
 
 float
 _Distance(PointLight* p, PointLight* q)
@@ -9,6 +10,16 @@ _Distance(PointLight* p, PointLight* q)
 }
 
 /*
+A stationary candidate has all tp.p, tp.q, and tp.r are all same.
+*/
+bool
+PointLight::isStationary(Candidate& c)
+{
+	return c.tp.p == c.tp.q && c.tp.q == c.tp.r;
+}
+
+
+/*
 Measure how p is compatible to q.
 This assumes causality, thus p has to be later frame than q to be compatible.
 */
@@ -16,7 +27,7 @@ float
 PointLight::_Compatibility(Candidate& a, Candidate& b)
 {
 	float sgm = 10.0f;
-	if (a.tp.q == b.tp.q) return 0.0f; //this happens for points in the first or last frames as well as isolated points.
+	if (a.tp.q == b.tp.q) return Threshold; //this happens for points in the first or last frames as well as isolated points.
 	float val = 0;
 	if (a.tp.p == b.tp.q && a.tp.q == b.tp.r)
 	{
@@ -57,6 +68,15 @@ PointLight::_Compatibility(Candidate& a, Candidate& b)
 	return val;
 }
 
+float
+PointLight::_CompatibilityStationary(Candidate& a, Candidate& b)
+{
+	float sgm = StationarySigma;
+	float d = _Distance(a.tp.q, b.tp.q);
+	float val = exp(-d*d / (2 * sgm*sgm));
+	return val;
+}
+
 void
 PointLight::print(char* tab, char* newl)
 {
@@ -71,7 +91,7 @@ PointLight::initializeProb()
 	int n = candidates.size();
 	for (int i = 0; i < candidates.size(); ++i)
 	{
-		candidates[i].prob = 1.0 / (n + 1.0);
+		candidates[i].prob = 1.0 / n;
 	}
 }
 
@@ -108,49 +128,43 @@ quickly converge to a local optimum.
 void
 PointLight::updateFitness()
 {
+	if (bDirty == false) return;
+
 	for (int i = 0; i < candidates.size(); ++i)
 	{
-		float s1 = Threshold;
-		for (int j = 0; j < candidates[i].tp.p->candidates.size(); ++j)
+		if (isStationary(candidates[i]))
 		{
-			float val = _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob;
-			s1 += val;
-			/*if (val > 0)
-			{
-				if ((id == 39 && (i == 6 || i == 8)))
-				{
-					printf("(%d %d %d)- (%d %d %d) %f %f\n",
-						candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
-						candidates[i].tp.p->candidates[j].tp.p->id, candidates[i].tp.p->candidates[j].tp.q->id, candidates[i].tp.p->candidates[j].tp.r->id,
-						val, s);
-				}
-			}*/
-			//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob);
+			candidates[i].comp = Threshold;
 		}
-		float s2 = Threshold;
-		for (int j = 0; j < candidates[i].tp.r->candidates.size(); ++j)
+		else
 		{
-			float val = _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob;
-			s2 += val;
-			/*if (val > 0)
+			float s1 = Threshold;
+			for (int j = 0; j < candidates[i].tp.p->candidates.size(); ++j)
 			{
-				if ((id == 39 && (i == 6 || i == 8)))
+				float val = _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob;
+				s1 += val;
+				//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob);
+			}
+			float s2 = Threshold;
+			for (int j = 0; j < candidates[i].tp.r->candidates.size(); ++j)
+			{
+				float val = _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob;
+				s2 += val;
+				if (id == -1)
 				{
-					printf("(%d %d %d)- (%d %d %d) %f %f\n", 
-						candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
-						candidates[i].tp.r->candidates[j].tp.p->id, candidates[i].tp.r->candidates[j].tp.q->id, candidates[i].tp.r->candidates[j].tp.r->id,
-						val, s);
+					printf("%d,%d:: %f, %f, %f, %f\n", id, candidates[i].tp.r->id, 
+						_Compatibility(candidates[i], candidates[i].tp.r->candidates[j]), candidates[i].tp.r->candidates[j].prob, val, s2);
 				}
-			}*/
-			//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob);
-		}
-		candidates[i].comp = sqrt(s1 * s2);
-		if (id == 39 || id == 20 || id == 30 || id == 29) // || id==41 || id==101)
-		{
-			if (candidates[i].comp > 0.1)
+				//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob);
+			}
+			candidates[i].comp = sqrt(s1 * s2);
+			if (id == -1)
 			{
-				printf("F %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
+				//if (candidates[i].comp > 0.1)
+				{
+					printf("F %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
 					candidates[i].comp, candidates[i].prob);
+				}
 			}
 		}
 	}
@@ -163,6 +177,8 @@ quickly converge to a local optimum.
 void
 PointLight::updateProb()
 {
+	if (bDirty == false) return;
+
 	float totalP = 0;
 	float total = 0;
 	for (int i = 0; i < candidates.size(); ++i)
@@ -175,14 +191,61 @@ PointLight::updateProb()
 	for (int i = 0; i < candidates.size(); ++i)
 	{
 		candidates[i].prob = candidates[i].comp * candidates[i].prob / (total + eta);
-		if (id == 39 || id == 20 || id == 30 || id == 29) // || id==41 || id==101)
+		/*if (id == 39 || id == 20 || id == 30 || id == 29) // || id==41 || id==101)
 		{
 			if (candidates[i].prob > 0.1)
 			{
 				printf("P %d) %d (%d %d %d) => %f (%f)\n", id, i, candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id, 
 					candidates[i].comp, candidates[i].prob);
 			}
+		}*/
+	}
+}
+
+void
+PointLight::updateState()
+{
+	float maxp = 0;
+	int idx = -1;
+	for (int i = 0; i < candidates.size(); ++i)
+	{
+		if (candidates[i].prob > maxp)
+		{
+			maxp = candidates[i].prob;
+			idx = i;
 		}
+	}
+	if (maxp <= Threshold) state = Isolated;
+	else {
+		PointLightTriple tp = candidates[idx].tp;
+		if (tp.p == tp.q && tp.r == tp.q) state = Isolated;
+		else if (tp.p == tp.q) state = Appeared;
+		else if (tp.r == tp.q) state = Seeking;
+		else state = Connected;
+	}
+	bDirty = false;
+}
+
+#include <set>
+void
+PointLight::updateCandidates() {
+	if (candidates0.empty() == false)
+	{
+		bDirty = true;
+		for (int i = 0; i < candidates0.size(); ++i)
+		{
+			if (find(candidates.begin(), candidates.end(), candidates0[i]) == candidates.end())
+			{
+				candidates.push_back(candidates0[i]);
+			}
+		}
+		/*for (int i = 0; i < candidates.size(); ++i)
+		{
+			candidates[i].tp.p->bDirty = true;
+			candidates[i].tp.r->bDirty = true;
+		}*/
+		candidates0.clear();
+		initializeProb();
 	}
 }
 
