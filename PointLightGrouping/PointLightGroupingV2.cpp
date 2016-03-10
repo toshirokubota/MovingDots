@@ -16,6 +16,8 @@ using namespace std;
 #include <szMiscOperations.h>
 #include <PointLight.h>
 #include <DisjointSet.h>
+#include <Hungarian.h>
+
 using namespace _PointLightNS;
 
 int PointLight::_id = 0;
@@ -128,75 +130,129 @@ isRedundant(PointLight* p, PointLight* q, vector<PointLight*>& Q, float thres)
 	return false;
 }
 
+float
+linkMeasure(PointLight* q)
+{
+	float measure = 0;
+	while (q != NULL)
+	{
+		PointLight* next = NULL;
+		PointLight::PointLightTriple tp = q->winner();
+		if (tp.p != NULL && tp.p != q)
+		{
+			PointLight::PointLightTriple tp2 = tp.p->winner();
+			if (tp2.r == q)
+			{
+				measure += 1.0f;
+				next = tp.p;
+			}
+		}
+		q = next;
+	}
+	return measure;
+}
+
 void
 addFrame(vector<PointLight*>& Q, vector<PointLight*>& frame, int range, float thres, float sigma)
 {
-	for (int i = 0; i < frame.size(); ++i)
+	vector<PointLight*> P;
+	vector<vector<float>> C0;
+	vector<vector<int>> cindx;
+	for (int j = 0; j < Q.size(); ++j)
 	{
-		PointLight* q = frame[i];
-		vector<pair<float, pair<PointLight*, int>>> pairs;
-		vector<pair<float, pair<PointLight*, int>>> pairs2;
-		for (int j = 0; j < Q.size(); ++j)
+		PointLight* p = Q[j];
+		if (p->state != Connected && p->state != Appeared) //need an extension
 		{
-			if (Abs(q->frame - Q[j]->frame) <= range)
+			vector<float> vals(frame.size(), 0);
+			vector<int> ids(frame.size(), -1);
+			bool bKeep = false;
+			for (int i = 0; i < frame.size(); ++i)
 			{
-				PointLight* p = Q[j];
-				if (p->state != Connected && p->state != Appeared) //need an extension
+				PointLight* q = frame[i];
+				if (p->frame < q->frame - range) continue;
+
+				if (p->id == 559 && q->id == 593)
 				{
-					for (int k = 0; k < p->candidates.size(); ++k)
+					i += 0;
+				}
+				for (int k = 0; k < p->candidates.size(); ++k)
+				{
+					PointLight::Candidate c(p, q, q);
+					float val = 0;
+					float fit = 0;
+					if (PointLight::isStationary(p->candidates[k]))
 					{
-						PointLight::Candidate c(p, q, q);
-						if (PointLight::isStationary(p->candidates[k]))
-						{
-							float cmp = PointLight::_CompatibilityStationary(p->candidates[k], c) * p->candidates[k].prob;
-							pairs2.push_back(pair<float, pair<PointLight*, int>>(cmp, pair<PointLight*, int>(p, k)));
-							if ((q->id == 415 || q->id == 416) && (p->id == 404 || p->id == 403))
-							{
-								printf("addFrameS: %d %d:  %f, %f, %f\n", q->id, p->id,
-									PointLight::_CompatibilityStationary(p->candidates[k], c), p->candidates[k].prob, cmp);
-							}
-						}
-						else
-						{
-							PointLight::Candidate c2(p->candidates[k].tp.p, p->candidates[k].tp.q, q);
-							float cmp = PointLight::_Compatibility(c2, c)* p->candidates[k].prob;
-							pairs.push_back(pair<float, pair<PointLight*, int>>(cmp, pair<PointLight*, int>(p, k)));
-							if ((q->id == 415 || q->id == 416) && (p->id == 404 || p->id==403))
-							{
-								printf("addFrame: %d %d:  %f, %f, %f\n", q->id, p->id,
-									PointLight::_Compatibility(c2, c), p->candidates[k].prob, cmp);
-							}
-						}
+						fit = PointLight::_CompatibilityStationary(p->candidates[k], c);
+						val = fit * p->candidates[k].prob;
+					}
+					else
+					{
+						PointLight::Candidate c2(p->candidates[k].tp.p, p->candidates[k].tp.q, q);
+						float lnk = linkMeasure(p);
+						fit = PointLight::_Compatibility(c2, c);
+						val = (fit + lnk) * p->candidates[k].prob;
+					}
+					if (val > vals[i])
+					{
+						ids[i] = k;
+						vals[i] = val;
+					}
+					if (fit > _PointLightNS::Threshold)
+					{
+						bKeep = true;
 					}
 				}
 			}
-		}
-		sort(pairs.begin(), pairs.end());
-		sort(pairs2.begin(), pairs2.end());
-		for (int j = pairs.size() - 1; j >= Max(0, (int)pairs.size() - MaxNumNeighbors); j--)
-		{
-			if (pairs[j].first <= thres) break;
-			PointLight* p = pairs[j].second.first;
-			int k = pairs[j].second.second;
-			q->candidates0.push_back(PointLight::Candidate(p, q, q));
-			//p->candidates[k].tp.r = q;
-			p->candidates0.push_back(PointLight::Candidate(p->candidates[k].tp.p, p->candidates[k].tp.q, q));
-		}
-		float sthres = 0;
-		for (int j = pairs2.size() - 1; j >= 0 && q->candidates.size() < MaxNumNeighbors; j--)
-		{
-			if (pairs2[j].first <= sthres) break;
-			PointLight* p = pairs2[j].second.first;
-			int k = pairs2[j].second.second;
-			q->candidates0.push_back(PointLight::Candidate(p, q, q));
-
-			p->candidates0.push_back(PointLight::Candidate(p->candidates[k].tp.p, p->candidates[k].tp.q, q));
-			if (j == pairs2.size() - 1)
+			if (bKeep)
 			{
-				sthres = pairs2[j].first / 2.0f;
+				P.push_back(p);
+				C0.push_back(vals);
+				cindx.push_back(ids);
 			}
-		}		
-		q->candidates0.push_back(PointLight::Candidate(q, q, q)); //always add an isolated candidate
+		}
+	}
+	printf("dim: %d, %d\n", frame.size(), P.size());
+	int n = Max(frame.size(), P.size());
+	const int dimsC[] = { n, n };
+	//convert cost matrix to a flat vector with appropriate 0-padding
+	vector<float> C(n*n, 0.0f);
+	for (int i = 0; i < frame.size(); ++i)
+	{
+		for (int j = 0; j < P.size(); ++j)
+		{
+			C[i*n + j] = C0[j][i];
+		}
+	}
+	Hungarian algo(C, dimsC);
+	float cost = algo.solve();
+	
+
+	/*for (int i = 0; i < frame.size(); ++i)
+	{
+		int j = algo.getJob(i);
+		printf("%d=>%d ", frame[i]->id, j < P.size() ? P[j]->id : -1);
+	}
+	printf("\n");*/
+
+	for (int i = 0; i < frame.size(); ++i)
+	{
+		PointLight* q = frame[i];
+		int j = algo.getJob(i);
+		if (j < P.size()) // && algo.getCost(j, i) > _PointLightNS::Threshold)
+		{
+			PointLight* p = P[j];
+
+			q->candidates0.push_back(PointLight::Candidate(p, q, q));
+			int k = cindx[j][i];
+			p->candidates0.push_back(PointLight::Candidate(p->candidates[k].tp.p, p->candidates[k].tp.q, q));
+			/*printf(">> (%d,%d,%d), (%d,%d,%d)\n",
+				p->id, q->id, q->id, p->candidates[k].tp.p->id, p->candidates[k].tp.q->id, q->id);*/
+		}
+		else
+		{
+			q->candidates0.push_back(PointLight::Candidate(q, q, q));
+			//printf(">> (%d,%d,%d)\n", q->id, q->id, q->id);
+		}
 	}
 	Q.insert(Q.end(), frame.begin(), frame.end());
 }
@@ -282,15 +338,15 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		addFrame(Q, frames[k], 5, 0.1, sigma);
 		update(Q, numIter);
 	}
-	vector<int> labels = clusterPoints(P);
+	vector<int> labels = clusterPoints(Q);
 
 	if (nlhs >= 1)
 	{
-		const int dims[] = { P.size(), 5 };
+		const int dims[] = { Q.size(), 5 };
 		vector<float> F(dims[0] * dims[1]);
 		for (int i = 0; i < dims[0]; ++i)
 		{
-			PointLight* p = P[i];
+			PointLight* p = Q[i];
 			SetData2(F, i, 0, dims[0], dims[1], p->x);
 			SetData2(F, i, 1, dims[0], dims[1], p->y);
 			SetData2(F, i, 2, dims[0], dims[1], p->frame);
@@ -312,11 +368,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	if (nlhs >= 3)
 	{
 		int nc = MaxNumCandidates;
-		const int dims[] = { P.size(), nc};
+		const int dims[] = { Q.size(), nc};
 		vector<int> F(dims[0] * dims[1], -1);
 		for (int i = 0; i < dims[0]; ++i)
 		{
-			PointLight* p = P[i];
+			PointLight* p = Q[i];
 			for (int j = 0, k=0; j < P[i]->candidates.size(); ++j)
 			{
 				SetData2(F, i, k++, dims[0], dims[1], P[i]->candidates[j].tp.p->id);

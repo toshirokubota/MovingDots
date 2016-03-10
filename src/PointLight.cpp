@@ -129,6 +129,7 @@ void
 PointLight::updateFitness()
 {
 	if (bDirty == false) return;
+	float rate = 0.;
 
 	for (int i = 0; i < candidates.size(); ++i)
 	{
@@ -141,19 +142,28 @@ PointLight::updateFitness()
 			float s1 = Threshold;
 			for (int j = 0; j < candidates[i].tp.p->candidates.size(); ++j)
 			{
-				float val = _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob;
-				s1 += val;
+				float fit = _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) + candidates[i].tp.p->candidates[j].comp * rate;
+				s1 += fit * candidates[i].tp.p->candidates[j].prob;
 				//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.p->candidates[j]) * candidates[i].tp.p->candidates[j].prob);
+				if (id == -1)
+				{
+					printf(">(%d %d %d),(%d %d %d):: %f, %f, %f, %f\n", 
+						candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
+						candidates[i].tp.p->candidates[j].tp.p->id, candidates[i].tp.p->candidates[j].tp.q->id, candidates[i].tp.p->candidates[j].tp.r->id,
+						_Compatibility(candidates[i], candidates[i].tp.p->candidates[j]), candidates[i].tp.p->candidates[j].prob, fit, s1);
+				}
 			}
 			float s2 = Threshold;
 			for (int j = 0; j < candidates[i].tp.r->candidates.size(); ++j)
 			{
-				float val = _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob;
-				s2 += val;
+				float fit = _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) + candidates[i].tp.r->candidates[j].comp * rate;
+				s2 += fit * candidates[i].tp.r->candidates[j].prob;
 				if (id == -1)
 				{
-					printf("%d,%d:: %f, %f, %f, %f\n", id, candidates[i].tp.r->id, 
-						_Compatibility(candidates[i], candidates[i].tp.r->candidates[j]), candidates[i].tp.r->candidates[j].prob, val, s2);
+					printf(">(%d %d %d),(%d %d %d):: %f, %f, %f, %f\n", 
+						candidates[i].tp.p->id, candidates[i].tp.q->id, candidates[i].tp.r->id,
+						candidates[i].tp.r->candidates[j].tp.p->id, candidates[i].tp.r->candidates[j].tp.q->id, candidates[i].tp.r->candidates[j].tp.r->id,
+						_Compatibility(candidates[i], candidates[i].tp.r->candidates[j]), candidates[i].tp.r->candidates[j].prob, fit, s2);
 				}
 				//s = Max(s, _Compatibility(candidates[i], candidates[i].tp.r->candidates[j]) * candidates[i].tp.r->candidates[j].prob);
 			}
@@ -187,7 +197,7 @@ PointLight::updateProb()
 		totalP += candidates[i].prob;
 	}
 	//float eta = Threshold; // totalP >= 1.0 ? 0.0f : (1.0 - totalP) * Threshold;
-	float eta = Threshold;
+	float eta = 0.0f; // Threshold;
 	for (int i = 0; i < candidates.size(); ++i)
 	{
 		candidates[i].prob = candidates[i].comp * candidates[i].prob / (total + eta);
@@ -224,6 +234,17 @@ PointLight::updateState()
 		else state = Connected;
 	}
 	bDirty = false;
+	if (id == 403 || id == 404)
+	{
+		if (idx >= 0)
+		{
+			printf("%d %d, winner=(%d,%d,%d)\n", id, state, candidates[idx].tp.p->id, candidates[idx].tp.q->id, candidates[idx].tp.r->id);
+		}
+		else
+		{
+			printf("%d %d, winner=NA\n", id, state);
+		}
+	}
 }
 
 #include <set>
